@@ -1,65 +1,38 @@
 use std::{collections::HashMap, path::PathBuf, thread};
 
 use clap::Parser;
-use thiserror::Error;
 
-#[derive(Debug, Error)]
-pub enum CsvColError {
-    #[error("filed to read {path}: {source}")]
-    Io {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
+use crate::parser::parse_file;
 
-    #[error("Thread paniced")]
-    ThreadPanic,
-}
+mod error;
+mod parser;
 
-type Result<T> = std::result::Result<T, CsvColError>;
+pub use error::{CsvColError, Result};
 
-#[derive(Debug, Default)]
-pub struct Stats<T> {
-    min: Option<T>,
-    max: Option<T>,
-    avg: f64,
-    median: f64,
-}
-
-#[derive(Debug)]
-pub enum NumberStats {
-    Int(Stats<i64>),
-    Float(Stats<f64>),
-}
-
-impl Default for NumberStats {
-    fn default() -> Self {
-        Self::Int(Stats::<i64>::default())
-    }
-}
-
-#[derive(Default, Debug)]
-pub struct Output(HashMap<String, NumberStats>);
+const DEFAULT_MEMORY_BUDGET: usize = 256 * 1024 * 1024;
 
 #[derive(Debug, Parser)]
 struct Args {
+    /// Output in json format
     #[arg(short, long)]
     json: bool,
+
+    /// Memory budget in bytes after which approximate median will be used
+    #[arg(long, default_value_t=DEFAULT_MEMORY_BUDGET)]
+    memory_budget: usize,
 
     #[arg(value_name = "FILE", num_args = 1..)]
     files: Vec<PathBuf>,
 }
 
-fn parse_columns(file: PathBuf) -> Result<Output> {
-    todo!()
-}
-
 pub fn run_csv_col_stats() -> Vec<Result<Output>> {
     let args = Args::parse();
 
+    // TODO: it's naive approach. It should balance budget per file
+    let budget_per_file = args.memory_budget / args.files.len();
     let mut handlers = Vec::new();
     for file in args.files {
-        handlers.push(thread::spawn(move || parse_columns(file)));
+        handlers.push(thread::spawn(move || parse_file(file, budget_per_file)));
     }
 
     let mut result = Vec::new();
@@ -72,3 +45,13 @@ pub fn run_csv_col_stats() -> Vec<Result<Output>> {
 
     result
 }
+
+#[derive(Debug, Default)]
+pub struct Stats {
+    pub min: Option<i64>,
+    pub max: Option<i64>,
+    pub avg: Option<f64>,
+    pub median: Option<f64>,
+}
+
+pub type Output = HashMap<String, Stats>;
