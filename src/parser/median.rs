@@ -3,6 +3,12 @@ use std::{cmp::Reverse, collections::BinaryHeap};
 
 use crate::{CsvColError, Result};
 
+#[derive(Default)]
+pub struct MedianHeap {
+    top: BinaryHeap<Reverse<i64>>,
+    bottom: BinaryHeap<i64>,
+}
+
 impl MedianHeap {
     fn new() -> Self {
         Self {
@@ -64,12 +70,6 @@ pub enum MedianConfig {
     Approximate(u32),
 }
 
-#[derive(Default)]
-pub struct MedianHeap {
-    top: BinaryHeap<Reverse<i64>>,
-    bottom: BinaryHeap<i64>,
-}
-
 pub enum Median {
     Exact(MedianHeap),
     Approximate(DDSketch),
@@ -99,5 +99,36 @@ impl Median {
             Self::Approximate(ddsketch) => ddsketch.quantile(0.5).map_err(CsvColError::DDSketch),
             Self::Exact(heaps) => Ok(heaps.median()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::median::MedianHeap;
+
+    #[test]
+    fn test_median_heap_empty() {
+        let heap = MedianHeap::new();
+        assert_eq!(heap.median(), None);
+    }
+
+    #[test]
+    fn test_median_heap_odd() {
+        let test_set = vec![1, 3, 5, 8, 9, 6, 3];
+        let mut heap = MedianHeap::new();
+        for item in test_set {
+            heap.add(item);
+        }
+        assert_eq!(heap.median().unwrap(), 5.);
+    }
+
+    #[test]
+    fn test_median_heap_even() {
+        let test_set = vec![12, 6, 1, 2, 3, 8];
+        let mut heap = MedianHeap::new();
+        for item in test_set {
+            heap.add(item);
+        }
+        assert_eq!(heap.median().unwrap(), 4.5);
     }
 }

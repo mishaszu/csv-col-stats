@@ -46,11 +46,11 @@ pub fn run_csv_col_stats() -> Vec<Result<Output>> {
     result
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Stats {
     pub min: Option<i64>,
     pub max: Option<i64>,
-    pub avg: Option<f64>,
+    pub mean: Option<f64>,
     pub median: Option<f64>,
 }
 

@@ -40,7 +40,7 @@ impl ColStats {
 
     fn update(&mut self, value: i64) {
         // TODO: handle overflow
-        let _ = self.sum.strict_add(value);
+        self.sum = self.sum.strict_add(value);
         self.count += 1;
         match self.max.as_ref() {
             Some(current_max) if current_max < &value => {
@@ -66,7 +66,7 @@ impl TryInto<Stats> for ColStats {
         let stats = Stats {
             max: self.max,
             min: self.min,
-            avg: if self.count > 0 {
+            mean: if self.count > 0 {
                 let result = self.sum as f64 / self.count as f64;
                 Some((result * 100.0).round() / 100.0)
             } else {
