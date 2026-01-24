@@ -1,7 +1,7 @@
 use std::thread;
 
 use clap::Parser;
-use csv_col_stats::{CsvColError, CsvColStatsArgs, TableView, parse_file};
+use csv_col_stats::{Config, CsvColError, CsvColStatsArgs, TableView, parse_file};
 use tabled::{
     Table,
     settings::{Alignment, Style, object::Columns},
@@ -9,6 +9,7 @@ use tabled::{
 
 fn main() {
     let args = CsvColStatsArgs::parse();
+    println!("{args:?}");
 
     // TODO: binary could be optimize to accept either path to files or IO read
     if args.files.is_empty() {
@@ -17,9 +18,13 @@ fn main() {
 
     // TODO: it's naive approach. It should balance budget per file
     let budget_per_file = args.memory_budget / args.files.len();
+    let mut config: Config = Config::from(&args);
+    config.median_config.memory_budget = budget_per_file;
+
     let mut handlers = Vec::new();
     for file in args.files {
-        handlers.push(thread::spawn(move || parse_file(file, budget_per_file)));
+        let config = config.clone();
+        handlers.push(thread::spawn(move || parse_file(file, config)));
     }
 
     let mut result = Vec::new();

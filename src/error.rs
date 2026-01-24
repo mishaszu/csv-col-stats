@@ -18,6 +18,9 @@ pub enum CsvColError {
     #[error("DDSketch error: {0}")]
     DDSketch(#[from] DDSketchError),
 
+    #[error("Can't parse filter: {0}")]
+    Filter(String),
+
     #[error("Can't parse CSV")]
     CsvParse(#[from] csv::Error),
 

@@ -1,7 +1,7 @@
 use sketches_ddsketch::{Config as DDConfig, DDSketch};
 use std::{cmp::Reverse, collections::BinaryHeap};
 
-use crate::{CsvColError, Result};
+use crate::{CsvColError, MedianConfig, Result};
 
 #[derive(Default)]
 pub struct MedianHeap {
@@ -65,9 +65,19 @@ impl MedianHeap {
     }
 }
 
-pub enum MedianConfig {
+pub enum MedianSettings {
     Exact,
-    Approximate(u32),
+    Approximate(Option<u32>),
+}
+
+impl From<&MedianConfig> for MedianSettings {
+    fn from(config: &MedianConfig) -> Self {
+        if config.exact_median {
+            MedianSettings::Exact
+        } else {
+            MedianSettings::Approximate(config.buckets)
+        }
+    }
 }
 
 pub enum Median {
@@ -76,12 +86,14 @@ pub enum Median {
 }
 
 impl Median {
-    pub fn new(config: MedianConfig) -> Self {
+    pub fn new(config: MedianSettings) -> Self {
         match config {
-            MedianConfig::Exact => Self::Exact(MedianHeap::new()),
-            MedianConfig::Approximate(bins) => {
+            MedianSettings::Exact => Self::Exact(MedianHeap::new()),
+            MedianSettings::Approximate(bins) => {
                 let mut ddcondig = DDConfig::default();
-                ddcondig.max_num_bins = bins;
+                if let Some(value) = bins {
+                    ddcondig.max_num_bins = value;
+                };
                 Self::Approximate(DDSketch::new(ddcondig))
             }
         }

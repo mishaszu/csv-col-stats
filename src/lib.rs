@@ -4,11 +4,14 @@ use clap::Parser;
 use serde::Serialize;
 
 mod error;
+mod filter;
 mod parser;
 
 pub use error::{CsvColError, Result};
 pub use parser::parse_file;
 use tabled::Tabled;
+
+use crate::filter::Expression;
 
 const DEFAULT_MEMORY_BUDGET: usize = 256 * 1024 * 1024;
 
@@ -23,12 +26,66 @@ pub struct CsvColStatsArgs {
     #[arg(short, long)]
     pub json: bool,
 
+    #[arg(short, long, default_value = "id")]
+    pub ignore_columns: Vec<String>,
+
+    #[arg(short, long)]
+    pub filter: Option<Expression>,
+
     /// Memory budget in bytes after which approximate median will be used
     #[arg(long, default_value_t=DEFAULT_MEMORY_BUDGET)]
     pub memory_budget: usize,
 
+    #[arg(long)]
+    pub approximate_bins: Option<u32>,
+
     #[arg(value_name = "FILE", num_args = 1..)]
     pub files: Vec<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MedianConfig {
+    pub memory_budget: usize,
+    pub buckets: Option<u32>,
+    pub exact_median: bool,
+}
+
+impl Default for MedianConfig {
+    fn default() -> Self {
+        Self {
+            memory_budget: DEFAULT_MEMORY_BUDGET,
+            buckets: None,
+            exact_median: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct DataConfig {
+    filter: Option<Expression>,
+    ignore_columns: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Config {
+    data_config: DataConfig,
+    pub median_config: MedianConfig,
+}
+
+impl From<&CsvColStatsArgs> for Config {
+    fn from(args: &CsvColStatsArgs) -> Self {
+        Self {
+            data_config: DataConfig {
+                filter: args.filter.clone(),
+                ignore_columns: args.ignore_columns.clone(),
+            },
+            median_config: MedianConfig {
+                memory_budget: args.memory_budget,
+                buckets: args.approximate_bins,
+                exact_median: true,
+            },
+        }
+    }
 }
 
 // TODO: implement Display for Stats

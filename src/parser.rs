@@ -1,6 +1,4 @@
-use sketches_ddsketch::{Config, DDSketch};
-
-use crate::{CsvColError, Stats};
+use crate::{CsvColError, MedianConfig, Stats};
 
 mod column;
 mod file;
@@ -22,19 +20,13 @@ pub(in crate::parser) struct ColStats {
 }
 
 impl ColStats {
-    fn new(is_exact_median: bool) -> Self {
+    fn new(median_config: &MedianConfig) -> Self {
         Self {
             sum: Default::default(),
             count: Default::default(),
             max: Default::default(),
             min: Default::default(),
-            median_approach: if is_exact_median {
-                Median::Exact(Default::default())
-            } else {
-                let mut config = Config::default();
-                config.max_num_bins = 100;
-                Median::Approximate(DDSketch::new(config))
-            },
+            median_approach: Median::new(median_config.into()),
         }
     }
 

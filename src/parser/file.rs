@@ -8,11 +8,14 @@ use std::{
 use csv::Reader;
 
 use crate::{
-    CsvColError, Output, Result, Stats,
-    parser::{ColStats, column::parse_column, is_empty},
+    Config, CsvColError, Output, Result, Stats,
+    parser::{
+        column::{ColumnOption, parse_column},
+        is_empty,
+    },
 };
 
-pub fn parse_file(path: PathBuf, memory_budget: usize) -> Result<Output> {
+pub fn parse_file(path: PathBuf, mut config: Config) -> Result<Output> {
     let file = File::open(&path).map_err(|e| CsvColError::Io {
         path: path.clone(),
         source: e,
@@ -21,32 +24,29 @@ pub fn parse_file(path: PathBuf, memory_budget: usize) -> Result<Output> {
         .metadata()
         .map_err(|e| CsvColError::Io { path, source: e })?
         .size();
-    let is_exact_median = file_size as usize <= memory_budget;
+
+    config.median_config.exact_median = config.median_config.memory_budget >= file_size as usize;
 
     let reader = BufReader::new(file);
 
-    let columns = parse_reader(reader, is_exact_median)?
+    let columns = parse_reader(reader, config)?
         .into_iter()
-        .flat_map(|(header, col)| {
-            if let Some(col) = col {
+        .flat_map(|(header, col)| match col {
+            ColumnOption::FilteredNumber(col, _) | ColumnOption::Number(col) => {
                 let col: Result<Stats> = col.try_into();
                 match col {
                     Ok(col) => Some(Ok((header, col))),
                     Err(e) => Some(Err(e)),
                 }
-            } else {
-                None
             }
+            _ => None,
         })
         .collect::<Result<Vec<_>>>()?;
 
     Ok(columns.into_iter().collect())
 }
 
-pub fn parse_reader(
-    reader: impl Read,
-    is_exact_median: bool,
-) -> Result<Vec<(String, Option<ColStats>)>> {
+pub fn parse_reader(reader: impl Read, config: Config) -> Result<Vec<(String, ColumnOption)>> {
     let mut csv_reader = Reader::from_reader(reader);
 
     let headers: Vec<String> = csv_reader
@@ -55,15 +55,31 @@ pub fn parse_reader(
         .map(ToOwned::to_owned)
         .collect();
 
-    let mut column_stats: Vec<Option<ColStats>> = Vec::with_capacity(headers.len());
-    for _ in 0..headers.len() {
-        column_stats.push(None);
+    let mut column_stats: Vec<ColumnOption> = Vec::with_capacity(headers.len());
+    for header in headers.iter() {
+        if config
+            .data_config
+            .ignore_columns
+            .iter()
+            .any(|v| v == header)
+        {
+            column_stats.push(ColumnOption::Ignored);
+        } else if let Some(filter) = config.data_config.filter.clone()
+            && filter.check_by_name(header)
+        {
+            column_stats.push(ColumnOption::UninitializedWithFilter(filter));
+        } else {
+            column_stats.push(ColumnOption::Uninitialized);
+        }
     }
 
     for (row_index, row) in csv_reader.byte_records().enumerate() {
         let row: csv::ByteRecord = row?;
 
         for (field_index, field) in row.iter().enumerate() {
+            if let ColumnOption::Ignored = column_stats[field_index] {
+                continue;
+            }
             if is_empty(field) {
                 continue;
             }
@@ -71,8 +87,8 @@ pub fn parse_reader(
                 field,
                 field_index,
                 row_index,
-                is_exact_median,
-                &mut column_stats,
+                &config.median_config,
+                &mut column_stats[field_index],
             )?;
         }
     }
@@ -84,7 +100,8 @@ pub fn parse_reader(
 mod tests {
     use std::io::{Cursor, Write};
 
-    use crate::DEFAULT_MEMORY_BUDGET;
+    use crate::Config as CsvColCinfig;
+    use crate::parser::column::ColumnOption::*;
 
     use super::*;
     use csv::WriterBuilder;
@@ -125,42 +142,43 @@ mod tests {
     fn test_parse_reader() {
         let cursor = Cursor::new(build_test_set());
         let reader = BufReader::new(cursor);
+        let config = CsvColCinfig::default();
 
-        let result = parse_reader(reader, true).unwrap();
+        let result = parse_reader(reader, config).unwrap();
 
         assert_eq!(result.len(), 3);
 
-        match result.first().unwrap().1.as_ref() {
-            Some(stat) => {
+        match result.first() {
+            Some((_, Number(stat))) => {
                 assert_eq!(stat.min, Some(1));
                 assert_eq!(stat.max, Some(3));
                 assert_eq!(stat.sum, 6);
                 assert_eq!(stat.count, 3);
                 assert_eq!(stat.median_approach.calculate().unwrap(), Some(2.));
             }
-            None => panic!("Stat should be initialized"),
+            _ => panic!("Stat should be initialized"),
         }
 
-        match result.get(1).unwrap().1.as_ref() {
-            Some(stat) => {
+        match result.get(1) {
+            Some((_, Number(stat))) => {
                 assert_eq!(stat.min, Some(10));
                 assert_eq!(stat.max, Some(30));
                 assert_eq!(stat.sum, 65);
                 assert_eq!(stat.count, 3);
                 assert_eq!(stat.median_approach.calculate().unwrap(), Some(25.));
             }
-            None => panic!("Stat should be initialized"),
+            _ => panic!("Stat should be initialized"),
         }
 
-        match result.get(2).unwrap().1.as_ref() {
-            Some(stat) => {
+        match result.get(2) {
+            Some((_, Number(stat))) => {
                 assert_eq!(stat.min, Some(20));
                 assert_eq!(stat.max, Some(40));
                 assert_eq!(stat.sum, 95);
                 assert_eq!(stat.count, 3);
                 assert_eq!(stat.median_approach.calculate().unwrap(), Some(35.));
             }
-            None => panic!("Stat should be initialized"),
+            _ => panic!("Stat should be initialized"),
         }
     }
 
@@ -175,7 +193,7 @@ mod tests {
             .unwrap();
 
         let mut result =
-            parse_file(PathBuf::from(temp_file.path()), DEFAULT_MEMORY_BUDGET).unwrap();
+            parse_file(PathBuf::from(temp_file.path()), CsvColCinfig::default()).unwrap();
 
         let id_stats = Stats {
             min: Some(1),
