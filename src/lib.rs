@@ -1,52 +1,38 @@
-use std::{collections::HashMap, path::PathBuf, thread};
+use std::{collections::HashMap, path::PathBuf};
 
 use clap::Parser;
-
-use crate::parser::parse_file;
+use serde::Serialize;
 
 mod error;
 mod parser;
 
 pub use error::{CsvColError, Result};
+pub use parser::parse_file;
+use tabled::Tabled;
 
 const DEFAULT_MEMORY_BUDGET: usize = 256 * 1024 * 1024;
 
 #[derive(Debug, Parser)]
-struct Args {
-    /// Output in json format
+pub struct CsvColStatsArgs {
+    // Display out as table
     #[arg(short, long)]
-    json: bool,
+    pub table: bool,
+
+    /// Format output to json. Can be display with `jq` for example
+    /// Overwrites `table`
+    #[arg(short, long)]
+    pub json: bool,
 
     /// Memory budget in bytes after which approximate median will be used
     #[arg(long, default_value_t=DEFAULT_MEMORY_BUDGET)]
-    memory_budget: usize,
+    pub memory_budget: usize,
 
     #[arg(value_name = "FILE", num_args = 1..)]
-    files: Vec<PathBuf>,
+    pub files: Vec<PathBuf>,
 }
 
-pub fn run_csv_col_stats() -> Vec<Result<Output>> {
-    let args = Args::parse();
-
-    // TODO: it's naive approach. It should balance budget per file
-    let budget_per_file = args.memory_budget / args.files.len();
-    let mut handlers = Vec::new();
-    for file in args.files {
-        handlers.push(thread::spawn(move || parse_file(file, budget_per_file)));
-    }
-
-    let mut result = Vec::new();
-    for handler in handlers {
-        match handler.join() {
-            Ok(output) => result.push(output),
-            Err(_) => result.push(Err(CsvColError::ThreadPanic)),
-        };
-    }
-
-    result
-}
-
-#[derive(Debug, Default, PartialEq)]
+// TODO: implement Display for Stats
+#[derive(Debug, Default, PartialEq, Serialize)]
 pub struct Stats {
     pub min: Option<i64>,
     pub max: Option<i64>,
@@ -55,3 +41,31 @@ pub struct Stats {
 }
 
 pub type Output = HashMap<String, Stats>;
+
+#[derive(Tabled)]
+pub struct TableView {
+    pub column_name: String,
+    min: String,
+    max: String,
+    mean: String,
+    median: String,
+}
+
+impl From<(String, Stats)> for TableView {
+    fn from((column_name, stats): (String, Stats)) -> Self {
+        Self {
+            column_name,
+            min: display_opt_num(&stats.min),
+            max: display_opt_num(&stats.max),
+            mean: display_opt_num(&stats.mean),
+            median: display_opt_num(&stats.median),
+        }
+    }
+}
+
+fn display_opt_num(value: &Option<impl ToString>) -> String {
+    value
+        .as_ref()
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "N/A".to_string())
+}
