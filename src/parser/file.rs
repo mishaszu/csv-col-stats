@@ -15,6 +15,28 @@ use crate::{
     },
 };
 
+/// Parses a CSV file from disk and computes column statistics.
+///
+/// This function opens the file at `path`, configures the median calculation
+/// strategy based on the file size and `config.median_config`, and delegates
+/// parsing to [`parse_reader`].
+///
+/// The median strategy (exact vs approximate) is selected automatically by
+/// comparing the configured memory budget against the input file size.
+///
+/// # Parameters
+/// - `path`: Path to the CSV file to parse.
+/// - `config`: Parsing and aggregation configuration. The median configuration
+///   may be adjusted based on the input file size.
+///
+/// # Returns
+/// Aggregated statistics for all numeric columns in the file.
+///
+/// # Errors
+/// Returns an error if:
+/// - The file cannot be opened or read.
+/// - CSV parsing fails.
+/// - A column previously identified as numeric encounters invalid data.
 pub fn parse_file(path: PathBuf, mut config: Config) -> Result<Output> {
     let file = File::open(&path).map_err(|e| CsvColError::Io {
         path: path.clone(),
@@ -46,6 +68,32 @@ pub fn parse_file(path: PathBuf, mut config: Config) -> Result<Output> {
     Ok(columns.into_iter().collect())
 }
 
+/// Parses CSV data from a reader and computes per-column statistics.
+///
+/// This function reads CSV records from `reader`, inspects each column,
+/// and incrementally builds column statistics according to `config`.
+///
+/// Column behavior:
+/// - Columns listed in `config.data_config.ignore_columns` are ignored.
+/// - Columns matching a filter expression are conditionally updated.
+/// - Columns are initialized as numeric on the first successfully parsed value.
+/// - Empty or non-numeric values are ignored until a column becomes numeric.
+/// - Once a column is classified as numeric, subsequent parse errors are reported.
+///
+/// Median calculation strategy (exact vs approximate) is determined by
+/// `config.median_config`.
+///
+/// # Parameters
+/// - `reader`: Any type implementing [`std::io::Read`] (e.g. file, buffer, cursor).
+/// - `config`: Parsing and aggregation configuration.
+///
+/// # Returns
+/// A vector of `(column_name, ColumnOption)` pairs, preserving CSV header order.
+///
+/// # Errors
+/// Returns an error if:
+/// - CSV parsing fails.
+/// - A column previously identified as numeric encounters a non-numeric value.
 pub fn parse_reader(reader: impl Read, config: Config) -> Result<Vec<(String, ColumnOption)>> {
     let mut csv_reader = Reader::from_reader(reader);
 

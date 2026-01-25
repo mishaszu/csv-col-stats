@@ -4,7 +4,7 @@ use crate::MedianConfig;
 use crate::filter::Expression;
 use crate::parser::ColStats;
 
-pub(super) enum ColumnOption {
+pub enum ColumnOption {
     Uninitialized,
     UninitializedWithFilter(Expression),
     Ignored,
@@ -18,6 +18,24 @@ pub enum ColumnParseError {
     BadNumber(#[from] lexical_core::Error),
 }
 
+/// Parses a single CSV field and updates column statistics.
+///
+/// This function attempts to parse `field` as a numeric value and updates
+/// the column state in `stats` accordingly:
+///
+/// - Initializes column statistics on the first successfully parsed value.
+/// - Updates existing numeric statistics.
+/// - Applies an optional filter expression when present.
+/// - Ignores empty or non-numeric fields until the column becomes numeric.
+///
+/// # Parameters
+/// - `field`: Raw CSV field bytes (may contain whitespace).
+/// - `median_config`: Configuration controlling median calculation strategy.
+/// - `stats`: Mutable column state updated in place.
+///
+/// # Errors
+/// Returns `ColumnParseError` if the column has already been classified as
+/// numeric and `field` cannot be parsed as a number.
 pub fn parse_column(
     field: &[u8],
     median_config: &MedianConfig,

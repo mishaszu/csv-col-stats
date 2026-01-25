@@ -80,7 +80,7 @@ building a complete, working solution within a few hours.
 
 ### Concurrency model
 - Use `std::thread` with a **simple, uncapped thread-per-file approach**
-- Threads are joined after spawning; all parsing runs in parallel
+- Threads are joined after spawning, all parsing runs in parallel
 - The model can later be replaced with a capped pool or Rayon if needed
 
 ### CSV parsing
@@ -95,7 +95,7 @@ building a complete, working solution within a few hours.
 - Attempt to parse numeric fields dynamically (`i64` or `f64`)
 - For simplicity, use `str::parse::<i64>()` / `str::parse::<f64>()`
 - (optimizatoin) For large files or performance-critical use cases, faster alternatives
-  like `lexical-core` or `fast-float` could be substituted
+  like `lexical-core` or ~~`fast-float`~~ could be substituted
 
 ### Calculating Mean
 - naive approach for mean calculation based on sum / count
@@ -103,9 +103,10 @@ building a complete, working solution within a few hours.
 - (optimization) floating point precision
 
 ### Calculating Median
-- to fit solution in few hours I pick tdigest for approximate median
-- (optimization) use configurable memory cap to use two-heap streaming for exact median and switch to approximate median after exceeding the cap
-- (optimization) use external memory handling for two-heap streaming median and make it configurable for exact or approximate median
+- [x] to fit solution in few hours I pick tdigest for approximate median
+- [x] I will handle only integers
+- [x] (optimization) use configurable memory cap to use two-heap streaming for exact median and switch to approximate median after exceeding the cap
+- [ ] (optimization) use external memory handling for two-heap streaming median and make it configurable for exact or approximate median
 
 ### Output
 - default: Debug output

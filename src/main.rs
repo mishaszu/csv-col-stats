@@ -12,7 +12,7 @@ fn main() {
 
     // TODO: binary could be optimize to accept either path to files or IO read
     if args.files.is_empty() {
-        panic!("no csv file provided");
+        panic!("No CSV file provided, run with \"-h\" for help");
     }
 
     // TODO: it's naive approach. It should balance budget per file
@@ -38,6 +38,7 @@ fn main() {
         let output = output.unwrap();
 
         println!("File: {:?}", args.files[index].as_os_str());
+        // TODO: multiple file support for correct JSON output requires redesign
         if args.json {
             let serialized_file = serde_json::to_string(&output).unwrap();
             println!("{serialized_file}");

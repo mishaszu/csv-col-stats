@@ -4,7 +4,7 @@ mod column;
 mod file;
 mod median;
 
-pub use column::ColumnParseError;
+pub(crate) use column::ColumnParseError;
 pub use file::parse_file;
 use median::Median;
 

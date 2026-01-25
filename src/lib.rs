@@ -15,30 +15,54 @@ use crate::filter::Expression;
 
 const DEFAULT_MEMORY_BUDGET: usize = 256 * 1024 * 1024;
 
+/// Command-line arguments for the CSV column statistics parser.
+///
+/// This struct defines all supported CLI options controlling input selection,
+/// filtering, aggregation behavior, and output formatting.
 #[derive(Debug, Parser)]
 pub struct CsvColStatsArgs {
-    // Display out as table
+    /// Display results as a human-readable table.
+    /// Sort columns alphabetically
     #[arg(short, long)]
     pub table: bool,
 
-    /// Format output to json. Can be display with `jq` for example
-    /// Overwrites `table`
+    /// Emit output as JSON.
+    ///
+    /// This option overrides `--table` and is intended for machine consumption
+    /// or post-processing with tools such as `jq`.
     #[arg(short, long)]
     pub json: bool,
 
+    /// List of column names to ignore during parsing.
+    ///
+    /// By default, the `id` column is ignored.
     #[arg(short, long, default_value = "id")]
     pub ignore_columns: Vec<String>,
 
+    /// Optional filter expression applied to column values.
+    ///
+    /// This accept simple expression like "value > 10"
     #[arg(short, long)]
     pub filter: Option<Expression>,
 
-    /// Memory budget in bytes after which approximate median will be used
+    /// Memory budget (in bytes) used to decide between exact and approximate
+    /// median calculation.
+    ///
+    /// Default: 256MB
+    ///
+    /// If the input file size exceeds this budget, an approximate median
+    /// algorithm is used.
     #[arg(long, default_value_t=DEFAULT_MEMORY_BUDGET)]
     pub memory_budget: usize,
 
+    /// Optional number of bins to use for approximate median calculation.
+    ///
+    /// When specified, this value overrides the default bin configuration
+    /// for the approximate median algorithm.
     #[arg(long)]
     pub approximate_bins: Option<u32>,
 
+    /// One or more CSV files to process.
     #[arg(value_name = "FILE", num_args = 1..)]
     pub files: Vec<PathBuf>,
 }
