@@ -11,14 +11,6 @@ pub(super) enum ColumnOption {
     FilteredNumber(ColStats, Expression),
 }
 
-impl ColumnOption {
-    #[allow(dead_code)]
-    fn is_none(&self) -> bool {
-        use ColumnOption::*;
-        matches!(self, Uninitialized | Ignored)
-    }
-}
-
 pub fn parse_column(
     field: &[u8],
     field_index: usize,
@@ -37,8 +29,7 @@ pub fn parse_column(
                         stats.update(value);
                     }
                 }
-                // initialize stats only on first row
-                ColumnOption::Uninitialized if row_index == 0 => {
+                ColumnOption::Uninitialized => {
                     let mut new_stats = ColStats::new(median_config);
                     new_stats.update(value);
                     *stats = ColumnOption::Number(new_stats);
@@ -51,24 +42,26 @@ pub fn parse_column(
                     }
                     *stats = ColumnOption::FilteredNumber(new_stats, expression.clone())
                 }
-                // TODO: if first rows are empty it's still should be possible to
-                // initialize column later
+                ColumnOption::Ignored => (),
+            }
+        }
+        Err(e) => {
+            match stats {
+                ColumnOption::Number(_) | ColumnOption::FilteredNumber(_, _) => {
+                    // TODO: remove field_index
+                    return Err(CsvColError::ColumnParse(row_index, field_index, e));
+                }
                 _ => (),
             }
         }
-        Err(e) => match stats {
-            ColumnOption::Number(_) | ColumnOption::FilteredNumber(_, _) => {
-                // TODO: remove field_index
-                return Err(CsvColError::ColumnParse(row_index, field_index, e));
-            }
-            _ => (),
-        },
     }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use ColumnOption::*;
 
@@ -126,13 +119,16 @@ mod tests {
         parse_column(b"test", 1, 0, &median_config, &mut column_stats[1]).unwrap();
 
         let item = column_stats.into_iter().nth(1).unwrap();
-        assert!(item.is_none());
+        match item {
+            Uninitialized | Ignored => (),
+            _ => panic!("field should be uninitialized"),
+        }
     }
 
     #[test]
     fn test_uninitialized_parse_column() {
         let median_config = MedianConfig::default();
-        let mut column_stats = vec![
+        let mut column_stats = [
             Uninitialized,
             Number(ColStats::new(&median_config)),
             Uninitialized,
@@ -140,7 +136,86 @@ mod tests {
 
         parse_column(b"120", 2, 1, &median_config, &mut column_stats[2]).unwrap();
 
-        let item = column_stats.into_iter().nth(2).unwrap();
-        assert!(item.is_none());
+        match &column_stats[2] {
+            Number(value) => {
+                assert_eq!(value.max, Some(120))
+            }
+            _ => panic!("field should be initialized"),
+        }
+    }
+
+    #[test]
+    fn test_uninitialized_filter_parse_column() {
+        let median_config = MedianConfig::default();
+        let mut column_stats = [
+            Uninitialized,
+            UninitializedWithFilter(Expression::from_str("value > 1").unwrap()),
+        ];
+
+        parse_column(b"120", 1, 1, &median_config, &mut column_stats[1]).unwrap();
+
+        // let item = column_stats.into_iter().nth(1).unwrap();
+        match &column_stats[1] {
+            FilteredNumber(s, _) => {
+                assert_eq!(s.max, Some(120))
+            }
+            _ => panic!("field should be initialized"),
+        }
+    }
+
+    #[test]
+    fn test_filter_out_uninitialized_parse_column() {
+        let median_config = MedianConfig::default();
+        let mut column_stats = [
+            Uninitialized,
+            UninitializedWithFilter(Expression::from_str("value > 10").unwrap()),
+        ];
+
+        parse_column(
+            b"5",
+            1,
+            Default::default(),
+            &median_config,
+            &mut column_stats[1],
+        )
+        .unwrap();
+
+        // let item = column_stats.into_iter().nth(1).unwrap();
+        match &column_stats[1] {
+            FilteredNumber(s, _) => {
+                assert_eq!(s.max, None);
+                assert_eq!(s.count, 0);
+            }
+            _ => panic!("field should be initialized"),
+        }
+    }
+
+    #[test]
+    fn test_filter_out_initialized_parse_column() {
+        let median_config = MedianConfig::default();
+        let mut stat = ColStats::new(&median_config);
+        stat.update(20);
+        let mut column_stats = [
+            Uninitialized,
+            FilteredNumber(stat, Expression::from_str("value > 10").unwrap()),
+        ];
+
+        parse_column(
+            b"5",
+            1,
+            Default::default(),
+            &median_config,
+            &mut column_stats[1],
+        )
+        .unwrap();
+
+        // let item = column_stats.into_iter().nth(1).unwrap();
+        match &column_stats[1] {
+            FilteredNumber(s, _) => {
+                assert_eq!(s.max, Some(20));
+                assert_eq!(s.count, 1);
+            }
+            _ => panic!("field should be initialized"),
+        }
     }
 }

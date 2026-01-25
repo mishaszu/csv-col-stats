@@ -138,6 +138,17 @@ mod tests {
         String::from_utf8(wtr.into_inner().unwrap()).unwrap()
     }
 
+    fn build_test_set2() -> String {
+        "id,name,value1,value2\n
+            1,\"test\",\"\",10\n
+            2,\"foo\",\"\",20\n
+            3,\"boo\",\"N/A\",30\n
+            4,\"foo\",1,40\n
+            5,\"boo\",2,50\n
+            6,\"foo\",3,60\n"
+            .to_string()
+    }
+
     #[test]
     fn test_parse_reader() {
         let cursor = Cursor::new(build_test_set());
@@ -215,6 +226,40 @@ mod tests {
             min: Some(20),
             max: Some(40),
             mean: Some(31.67),
+            median: Some(35.),
+        };
+        assert_eq!(result.remove("value2").unwrap(), value2_stats);
+    }
+
+    #[test]
+    fn test_parse_file_empty_fields() {
+        let test_set = build_test_set2();
+        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
+
+        temp_file
+            .as_file_mut()
+            .write_all(test_set.as_bytes())
+            .unwrap();
+
+        let mut config = CsvColCinfig::default();
+        config.data_config.ignore_columns = vec!["id".to_string()];
+
+        let mut result = parse_file(PathBuf::from(temp_file.path()), config).unwrap();
+
+        assert_eq!(result.len(), 2);
+
+        let value1_stats = Stats {
+            min: Some(1),
+            max: Some(3),
+            mean: Some(2.),
+            median: Some(2.),
+        };
+        assert_eq!(result.remove("value1").unwrap(), value1_stats);
+
+        let value2_stats = Stats {
+            min: Some(10),
+            max: Some(60),
+            mean: Some(35.),
             median: Some(35.),
         };
         assert_eq!(result.remove("value2").unwrap(), value2_stats);
