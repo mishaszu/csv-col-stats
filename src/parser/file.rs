@@ -2,7 +2,7 @@ use std::{
     fs::File,
     io::{BufReader, Read},
     os::unix::fs::MetadataExt,
-    path::PathBuf,
+    path::Path,
 };
 
 use csv::Reader;
@@ -37,14 +37,12 @@ use crate::{
 /// - The file cannot be opened or read.
 /// - CSV parsing fails.
 /// - A column previously identified as numeric encounters invalid data.
-pub fn parse_file(path: PathBuf, mut config: Config) -> Result<Output> {
-    let file = File::open(&path).map_err(|e| CsvColError::Io {
-        path: path.clone(),
-        source: e,
-    })?;
+pub fn parse_file(path: &Path, mut config: Config) -> Result<Output> {
+    let file =
+        File::open(path).map_err(|e| CsvColError::Io(path.to_string_lossy().into_owned(), e))?;
     let file_size = file
         .metadata()
-        .map_err(|e| CsvColError::Io { path, source: e })?
+        .map_err(|e| CsvColError::Io(path.to_string_lossy().into_owned(), e))?
         .size();
 
     config.median_config.exact_median = config.median_config.memory_budget >= file_size as usize;
@@ -147,6 +145,7 @@ pub fn parse_reader(reader: impl Read, config: Config) -> Result<Vec<(String, Co
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Write};
+    use std::path::PathBuf;
 
     use crate::Config as CsvColCinfig;
     use crate::parser::column::ColumnOption::*;
@@ -226,8 +225,11 @@ mod tests {
             .write_all(test_set.as_bytes())
             .unwrap();
 
-        let mut result =
-            parse_file(PathBuf::from(temp_file.path()), CsvColCinfig::default()).unwrap();
+        let mut result = parse_file(
+            PathBuf::from(temp_file.path()).as_path(),
+            CsvColCinfig::default(),
+        )
+        .unwrap();
 
         let id_stats = Stats {
             min: Some(1),
@@ -267,7 +269,7 @@ mod tests {
         let mut config = CsvColCinfig::default();
         config.data_config.ignore_columns = vec!["id".to_string()];
 
-        let mut result = parse_file(PathBuf::from(temp_file.path()), config).unwrap();
+        let mut result = parse_file(PathBuf::from(temp_file.path()).as_path(), config).unwrap();
 
         assert_eq!(result.len(), 2);
 
