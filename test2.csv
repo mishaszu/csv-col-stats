@@ -1,0 +1,7 @@
+id,name,value1,value2
+1,"test","", 10
+2,"foo","", 20
+3,"boo","N/A",30 
+4,"foo",1,40
+5,"boo",2,50
+6,"foo",3,60

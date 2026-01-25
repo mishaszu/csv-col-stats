@@ -11,7 +11,7 @@ use crate::{
     Config, CsvColError, Output, Result, Stats,
     parser::{
         column::{ColumnOption, parse_column},
-        is_empty,
+        is_empty, trim_bytes,
     },
 };
 
@@ -83,13 +83,13 @@ pub fn parse_reader(reader: impl Read, config: Config) -> Result<Vec<(String, Co
             if is_empty(field) {
                 continue;
             }
+            let trimmed_bytes = trim_bytes(field);
             parse_column(
-                field,
-                field_index,
-                row_index,
+                trimmed_bytes,
                 &config.median_config,
                 &mut column_stats[field_index],
-            )?;
+            )
+            .map_err(|e| CsvColError::ColumnParse(row_index, field_index, e))?;
         }
     }
 
@@ -104,45 +104,20 @@ mod tests {
     use crate::parser::column::ColumnOption::*;
 
     use super::*;
-    use csv::WriterBuilder;
-    use serde::Serialize;
-
-    #[derive(Serialize)]
-    struct Row {
-        id: u32,
-        value1: u32,
-        value2: u32,
-    }
 
     fn build_test_set() -> String {
-        let mut wtr = WriterBuilder::new().from_writer(vec![]);
-        wtr.serialize(Row {
-            id: 1,
-            value1: 10,
-            value2: 20,
-        })
-        .unwrap();
-        wtr.serialize(Row {
-            id: 2,
-            value1: 30,
-            value2: 40,
-        })
-        .unwrap();
-        wtr.serialize(Row {
-            id: 3,
-            value1: 25,
-            value2: 35,
-        })
-        .unwrap();
-
-        String::from_utf8(wtr.into_inner().unwrap()).unwrap()
+        "id,value1,value2\n
+            1,10,20\n
+            2,30,40\n
+            3,25,35"
+            .to_string()
     }
 
     fn build_test_set2() -> String {
         "id,name,value1,value2\n
-            1,\"test\",\"\",10\n
-            2,\"foo\",\"\",20\n
-            3,\"boo\",\"N/A\",30\n
+            1,\"test\",\"\", 10\n
+            2,\"foo\",\"\", 20\n
+            3,\"boo\",\"N/A\",30 \n
             4,\"foo\",1,40\n
             5,\"boo\",2,50\n
             6,\"foo\",3,60\n"

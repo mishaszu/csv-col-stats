@@ -3,6 +3,10 @@ use std::path::PathBuf;
 use sketches_ddsketch::DDSketchError;
 use thiserror::Error;
 
+use crate::parser::ColumnParseError;
+
+pub type Result<T> = std::result::Result<T, CsvColError>;
+
 #[derive(Debug, Error)]
 pub enum CsvColError {
     #[error("filed to read {path}: {source}")]
@@ -13,7 +17,7 @@ pub enum CsvColError {
     },
 
     #[error("Column failed to parse number on row {0} and field {1}: {2}")]
-    ColumnParse(usize, usize, #[source] lexical_core::Error),
+    ColumnParse(usize, usize, #[source] ColumnParseError),
 
     #[error("DDSketch error: {0}")]
     DDSketch(#[from] DDSketchError),
@@ -27,5 +31,3 @@ pub enum CsvColError {
     #[error("Thread paniced")]
     ThreadPanic,
 }
-
-pub type Result<T> = std::result::Result<T, CsvColError>;

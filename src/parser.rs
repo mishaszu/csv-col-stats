@@ -4,11 +4,32 @@ mod column;
 mod file;
 mod median;
 
+pub use column::ColumnParseError;
 pub use file::parse_file;
 use median::Median;
 
 pub(in crate::parser) fn is_empty(bytes: &[u8]) -> bool {
     bytes.is_empty() || bytes == b"NaN" || bytes == b"nan" || bytes == b"null" || bytes == b"N/A"
+}
+
+pub(in crate::parser) fn trim_bytes(mut bytes: &[u8]) -> &[u8] {
+    while let Some((c, tail)) = bytes.split_first() {
+        if c.is_ascii_whitespace() {
+            bytes = tail;
+        } else {
+            break;
+        }
+    }
+
+    while let Some((c, head)) = bytes.split_last() {
+        if c.is_ascii_whitespace() {
+            bytes = head;
+        } else {
+            break;
+        }
+    }
+
+    bytes
 }
 
 pub(in crate::parser) struct ColStats {

@@ -1,7 +1,8 @@
+use thiserror::Error;
+
 use crate::MedianConfig;
 use crate::filter::Expression;
 use crate::parser::ColStats;
-use crate::{CsvColError, Result};
 
 pub(super) enum ColumnOption {
     Uninitialized,
@@ -11,13 +12,17 @@ pub(super) enum ColumnOption {
     FilteredNumber(ColStats, Expression),
 }
 
+#[derive(Error, Debug)]
+pub enum ColumnParseError {
+    #[error("Can't parse number: {0}")]
+    BadNumber(#[from] lexical_core::Error),
+}
+
 pub fn parse_column(
     field: &[u8],
-    field_index: usize,
-    row_index: usize,
     median_config: &MedianConfig,
     stats: &mut ColumnOption,
-) -> Result<()> {
+) -> Result<(), ColumnParseError> {
     match lexical_core::parse::<i64>(field) {
         Ok(value) => {
             match stats {
@@ -49,9 +54,9 @@ pub fn parse_column(
             match stats {
                 ColumnOption::Number(_) | ColumnOption::FilteredNumber(_, _) => {
                     // TODO: remove field_index
-                    return Err(CsvColError::ColumnParse(row_index, field_index, e));
+                    return Err(ColumnParseError::BadNumber(e));
                 }
-                _ => (),
+                value => *value = ColumnOption::Ignored,
             }
         }
     }
@@ -70,41 +75,41 @@ mod tests {
         let mut column_stats = [Uninitialized, Uninitialized];
 
         let median_config = MedianConfig::default();
-        parse_column(b"16", 1, 0, &median_config, &mut column_stats[1]).unwrap();
+        parse_column(b"16", &median_config, &mut column_stats[1]).unwrap();
 
         match column_stats.get(1).unwrap() {
             Number(stat) => {
-                assert_eq!(stat.min.unwrap(), 16);
-                assert_eq!(stat.max.unwrap(), 16);
+                assert_eq!(stat.min, Some(16));
+                assert_eq!(stat.max, Some(16));
                 assert_eq!(stat.sum, 16);
                 assert_eq!(stat.count, 1);
-                assert_eq!(stat.median_approach.calculate().unwrap().unwrap(), 16.);
+                assert_eq!(stat.median_approach.calculate().unwrap(), Some(16.));
             }
             _ => panic!("Stat should be initialized"),
         }
 
-        parse_column(b"4", 1, 0, &median_config, &mut column_stats[1]).unwrap();
+        parse_column(b"4", &median_config, &mut column_stats[1]).unwrap();
 
         match column_stats.get(1).unwrap() {
             Number(stat) => {
-                assert_eq!(stat.min.unwrap(), 4);
-                assert_eq!(stat.max.unwrap(), 16);
+                assert_eq!(stat.min, Some(4));
+                assert_eq!(stat.max, Some(16));
                 assert_eq!(stat.sum, 20);
                 assert_eq!(stat.count, 2);
-                assert_eq!(stat.median_approach.calculate().unwrap().unwrap(), 10.);
+                assert_eq!(stat.median_approach.calculate().unwrap(), Some(10.));
             }
             _ => panic!("Stat should be initialized"),
         }
 
-        parse_column(b"2", 1, 0, &median_config, &mut column_stats[1]).unwrap();
+        parse_column(b"2", &median_config, &mut column_stats[1]).unwrap();
 
         match column_stats.get(1).unwrap() {
             Number(stat) => {
-                assert_eq!(stat.min.unwrap(), 2);
-                assert_eq!(stat.max.unwrap(), 16);
+                assert_eq!(stat.min, Some(2));
+                assert_eq!(stat.max, Some(16));
                 assert_eq!(stat.sum, 22);
                 assert_eq!(stat.count, 3);
-                assert_eq!(stat.median_approach.calculate().unwrap().unwrap(), 4.);
+                assert_eq!(stat.median_approach.calculate().unwrap(), Some(4.));
             }
             _ => panic!("Stat should be initialized"),
         }
@@ -116,7 +121,7 @@ mod tests {
 
         let median_config = MedianConfig::default();
 
-        parse_column(b"test", 1, 0, &median_config, &mut column_stats[1]).unwrap();
+        parse_column(b"test", &median_config, &mut column_stats[1]).unwrap();
 
         let item = column_stats.into_iter().nth(1).unwrap();
         match item {
@@ -134,7 +139,7 @@ mod tests {
             Uninitialized,
         ];
 
-        parse_column(b"120", 2, 1, &median_config, &mut column_stats[2]).unwrap();
+        parse_column(b"120", &median_config, &mut column_stats[2]).unwrap();
 
         match &column_stats[2] {
             Number(value) => {
@@ -152,7 +157,7 @@ mod tests {
             UninitializedWithFilter(Expression::from_str("value > 1").unwrap()),
         ];
 
-        parse_column(b"120", 1, 1, &median_config, &mut column_stats[1]).unwrap();
+        parse_column(b"120", &median_config, &mut column_stats[1]).unwrap();
 
         // let item = column_stats.into_iter().nth(1).unwrap();
         match &column_stats[1] {
@@ -171,14 +176,7 @@ mod tests {
             UninitializedWithFilter(Expression::from_str("value > 10").unwrap()),
         ];
 
-        parse_column(
-            b"5",
-            1,
-            Default::default(),
-            &median_config,
-            &mut column_stats[1],
-        )
-        .unwrap();
+        parse_column(b"5", &median_config, &mut column_stats[1]).unwrap();
 
         // let item = column_stats.into_iter().nth(1).unwrap();
         match &column_stats[1] {
@@ -200,14 +198,7 @@ mod tests {
             FilteredNumber(stat, Expression::from_str("value > 10").unwrap()),
         ];
 
-        parse_column(
-            b"5",
-            1,
-            Default::default(),
-            &median_config,
-            &mut column_stats[1],
-        )
-        .unwrap();
+        parse_column(b"5", &median_config, &mut column_stats[1]).unwrap();
 
         // let item = column_stats.into_iter().nth(1).unwrap();
         match &column_stats[1] {

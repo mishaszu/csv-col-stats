@@ -9,7 +9,6 @@ use tabled::{
 
 fn main() {
     let args = CsvColStatsArgs::parse();
-    println!("{args:?}");
 
     // TODO: binary could be optimize to accept either path to files or IO read
     if args.files.is_empty() {
@@ -22,7 +21,7 @@ fn main() {
     config.median_config.memory_budget = budget_per_file;
 
     let mut handlers = Vec::new();
-    for file in args.files {
+    for file in args.files.clone() {
         let config = config.clone();
         handlers.push(thread::spawn(move || parse_file(file, config)));
     }
@@ -35,9 +34,10 @@ fn main() {
         };
     }
 
-    result.into_iter().for_each(|output| {
+    result.into_iter().enumerate().for_each(|(index, output)| {
         let output = output.unwrap();
 
+        println!("File: {:?}", args.files[index].as_os_str());
         if args.json {
             let serialized_file = serde_json::to_string(&output).unwrap();
             println!("{serialized_file}");
